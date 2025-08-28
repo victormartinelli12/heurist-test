@@ -1,4 +1,4 @@
-﻿unit uHeuristicTest;
+unit uHeuristicTest;
 
 interface
 
@@ -9,15 +9,19 @@ uses
   Math;
 
 type
+  TClients = class;
+  TVehicles = class;
+  TVehicle = class;
+
   TClient = class(TObject)
   protected
-    fX: real;
-    fY: real;
+    fX    : real;
+    fY    : real;
+    fName : string;
     constructor Create(x, y, demand: real; clientType: integer);
   private
-    fName         : string;
     fDemand       : real;
-    fDemandWeight : real
+    fDemandWeight : real;
     fClientType   : integer;
   public
     procedure SetDemand(demand: real);
@@ -28,6 +32,27 @@ type
     property Name       : string  read fName;
     property Demand     : real    read fDemand;
     property ClientType : integer read fClientType;
+  end;
+
+  TDeposit = class(TClient)
+  private
+    fCapacity : real;
+    fClients  : TClients;
+    fVehicles : TVehicles;
+  public
+    constructor Create(capacity: real);
+    destructor  Destroy; override;
+    function    FindMostDistantClient: TClient;
+    function    FindNearestClient: TClient;
+    function    GetClient(index: integer): TClient;
+    function    GetVehicle(index: integer): TVehicle;
+    procedure   SetDepositCapacity;
+    procedure   SortClients;
+    property Clients[index: integer]  : TClient  read GetClient;
+    property Vehicles[index: integer] : TVehicle read GetVehicle;
+  published
+    property Name                     : string   read fName;
+    property Capacity                 : real     read fCapacity;
   end;
 
   TClients = class(TObjectList)
@@ -41,7 +66,7 @@ type
     property Items[index: integer]: TClient read GetItem write SetItem; default;
   end;
 
-  TVechile = class(TObject)
+  TVehicle = class(TObject)
   private
     fCapacity      : real;
     fDepartureTime : TDateTime;
@@ -65,17 +90,24 @@ type
     property WeigthLimit   : real      read fWeigthLimit;
   end;
 
-  TVechiles = class(TObjectList)
+  TVehicles = class(TObjectList)
   private
-    function GetItem(index: integer): TVechile;
+    function GetItem(index: integer): TVehicle;
   public
-    function Add(aVehicle: TVechile): integer;
-    property Items[index: integer]: TVechile read GetItem; default;
+    function Add(aVehicle: TVehicle): integer;
+    property Items[index: integer]: TVehicle read GetItem; default;
   end;
 
-  // implementar TDeposit
+function CompareClientsPointers(ptr1, ptr2: Pointer): longInt;
+function CalcEuclideanDistance(deposit, client: TClient): real;
 
 implementation
+
+const
+  INFINITE=10E14;
+
+var
+  GLOBAL_DEPOSIT: TDeposit;
 
 { TClient }
 constructor TClient.Create(x, y, demand: real; clientType: integer);
@@ -99,7 +131,7 @@ begin
   try
     sb.Append('Cliente: ' + IntToStr(fClientType) + ' - (');
     sb.Append(FormatFloat('0.00', fX) + ', ' + FormatFloat('0.00', fY) + ')');
-    Result:=sb
+    Result:=sb.ToString;
   finally
     sb.Free;
   end;
@@ -107,18 +139,18 @@ end;
 
 { TClients }
 function TClients.GetItem(index: integer): TClient;
-begin 
+begin
   Result:=TClient(inherited Items[index])
 end;
 
-function TClients.SetItem(index: integer; const client: TClient);
+procedure TClients.SetItem(index: integer; const client: TClient);
 begin
   inherited Items[index]:=client;
 end;
 
 function  TClients.Add(aClient: TClient): integer;
 begin
-  Result:=inherited Add(client);
+  Result:=inherited Add(aClient);
 end;
 
 procedure TClients.InsertDeposit(deposit: TDeposit);
@@ -127,7 +159,7 @@ begin
 end;
 
 { TVechile }
-constructor TVechile.CreateCreate(capacity, costPerKm: real);
+constructor TVehicle.Create(capacity, costPerKm: real);
 begin
   fCapacity:=capacity;
   fCostPerKm:=costPerKm;
@@ -136,13 +168,13 @@ begin
   fDepartureTime:=Now;
 end;
 
-destructor TVechile.Destroy;
+destructor TVehicle.Destroy;
 begin
   fClients.Free;
   inherited;
 end;
 
-procedure TVechile.SetCapacityVehicle(clientDemand, clientWeigthDemand: real);
+procedure TVehicle.SetCapacityVehicle(clientDemand, clientWeigthDemand: real);
 begin
   if (fCapacity > 0) and (fWeigthLimit > 0) then
   begin
@@ -150,10 +182,10 @@ begin
     fWeigthLimit:=fWeigthLimit - clientWeigthDemand;
   end
   else
-    fCanLoad=false;
+    fCanLoad:=false;
 end;
 
-procedure TVechile.SetVehicleArriveTime;
+procedure TVehicle.SetVehicleArriveTime;
 begin
   fArriveTime:=Now;
 end;
@@ -161,15 +193,127 @@ end;
 { TVehicles }
 function TVehicles.GetItem(index: integer): TVehicle;
 begin
-  Result:= inherited Items[index];
+  Result:= TVehicle(inherited Items[index]);
 end;
 
-function TVechiles.Add(vehicle: TVechile): integer;
+function TVehicles.Add(aVehicle: TVehicle): integer;
 begin
-  Result:= inherited Add(vehicle)
+  Result:= inherited Add(aVehicle)
 end;
 
 { TDeposit }
-// implementar TDeposit aqui.
+constructor TDeposit.Create(capacity: real);
+begin
+  inherited Create(0.0,0.0,0.0,-1);
+  fName:='Deposito';
+  fCapacity:=capacity;
+  fClients:=TClients.Create(true);
+  fVehicles:=TVehicles.Create(true);
+end;
+
+destructor TDeposit.Destroy;
+begin
+  fClients.Free;
+  fVehicles.Free;
+  inherited;
+end;
+
+function TDeposit.FindMostDistantClient: TClient;
+var
+  i: integer;
+  distance, maxDistance: real;
+  client: TClient;
+begin
+  distance:=0.0;
+  for i:= 1 to fClients.Count - 1 do
+  begin
+    maxDistance:=CalcEuclideanDistance(fClients[0], fClients[i]);
+    if maxDistance > distance then
+    begin
+      distance:=maxDistance;
+      client:=fClients[i]
+    end;
+  end;
+  Result:=client;
+end;
+
+function TDeposit.FindNearestClient: TClient;
+var
+  i: integer;
+  distance, minDistance: real;
+  client: TClient;
+begin
+  distance:=INFINITE;
+  for i:=1 to fClients.Count - 1 do
+  begin
+    minDistance:=CalcEuclideanDistance(fClients[0], fClients[i]);
+    if minDistance < distance then
+    begin
+      distance:=minDistance;
+      client:=fClients[i]
+    end;
+  end;
+  Result:=client;
+end;
+
+function TDeposit.GetVehicle(index: integer): TVehicle;
+begin
+  Result:=fVehicles.GetItem(index);
+end;
+
+function TDeposit.GetClient(index: integer): TClient;
+begin
+  Result:=fClients.GetItem(index);
+end;
+
+procedure TDeposit.SetDepositCapacity;
+var
+  i: integer;
+  totalDemand: real;
+  client: TClient;
+begin
+  totalDemand:=0;
+  for i:=1 to fClients.Count - 1 do
+  begin
+    client:=fClients.GetItem(i);
+    totalDemand:=totalDemand + client.Demand;
+  end;
+  if fCapacity > totalDemand then
+     fCapacity:=fCapacity - totalDemand;
+end;
+
+procedure TDeposit.SortClients;
+begin
+  GLOBAL_DEPOSIT:=Self;
+  fClients.Sort(@CompareClientsPointers);
+end;
+
+// FUNÇÕES GLOBAIS -------
+
+function CalcEuclideanDistance(deposit, client: TClient): real;
+var
+  diffX, diffY: real;
+begin
+  diffX:=Power(client.X - deposit.X, 2);
+  diffY:=Power(client.Y - deposit.Y, 2);
+  Result:=Sqrt(diffX + diffY);
+end;
+
+function CompareClientsPointers(ptr1, ptr2: Pointer): longInt;
+var
+  client1, client2: TClient;
+  dist1, dist2: real;
+begin
+  client1:=TClient(ptr1);
+  client2:=TClient(ptr2);
+  dist1:=CalcEuclideanDistance(GLOBAL_DEPOSIT.fClients[0], client1);
+  dist2:=CalcEuclideanDistance(GLOBAL_DEPOSIT.fClients[0], client2);
+  if dist1 > dist2 then
+    Result:=-1
+  else if dist1 < dist2 then
+    Result:=1
+  else
+    Result:=0;
+end;
 
 end.
