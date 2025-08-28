@@ -1,0 +1,257 @@
+unit uHeuristicTest;
+
+interface
+
+uses
+  System.SysUtils,
+  System.Generics.Collections,
+  Math;
+
+type
+  TOrigin = class
+  private
+    fX: real;
+    fY: real;
+    fName: string;    
+  public
+    property X    :    real   read fX;
+    property Y    :    real   read fY;
+    property Name :    string read fName;
+
+    constructor Create(x, y: real);
+
+  end;
+
+  TClient = class
+  private 
+    fX: real;
+    fY: real;
+    fName: string;
+    fDemand: real;
+    fType: integer; // 0 = entrega - 1 = coleta - 2 = misto
+  public 
+    property X    : real    read fX;
+    property Y    : real    read fY;
+    property Name : string  read fName;
+    property Type : integer read fType;
+
+    constructor Create(x, y, demand: real; type: integer);
+  
+  end;
+
+  TRestriction = class
+  private
+    fMessage: string;
+  public
+    property Message: string read fMessage;
+
+    constructor Create(message: string);
+  
+  end;
+
+  TVehicle = class
+  private
+    fCapacity: real;
+    fCanLoad: boolean;
+    fRestriction: TRestriction; 
+  public
+    property Capacity : real    read fCapacity;
+    property CanLoad  : boolean read fCanLoad;
+
+    constructor Create(capacity: real);
+
+    procedure AlertRestriction(demand: real);
+    
+  end;
+
+  TRoute = class
+  private
+    fPoints: TList;
+    fVehicles: TObjectList<TVehicle>;
+    fCost: real;
+    fDistance: real;      
+  public
+    property Points    :  TList                read fPoints;
+    property Vehicles  : TObjectList<TVehicle> read fVehicles;
+    property Cost      : real                  read fCost;
+    property Distance  : real                  read fDistance;
+
+    constructor Create;
+    destructor Destroy; override;
+
+    function CalcEuclideanDistance(origin: TOrigin; client: TClient): real;
+    function FindMoreDistantClient: TClient;
+    function FindnearestClient: TClient;
+    
+  end;
+
+  THeuristic = class
+  private
+    fRoute: TRoute;
+    fBetterPath: TList;
+  public
+    property Route      : TRoute read fRoute;
+    property BetterPath : TList  read fBetterPath;
+
+    constructor Create(route: TRoute);
+    destructor Destroy; override;
+
+    procedure AddClient;
+    procedure InsertDemandIntoVehicle;
+    procedure GenerateRoute;
+
+  end;
+
+implementation
+
+const
+  INFINITE=1.0E14;
+
+{ TOrigin }
+constructor TOrigin.Create(x: real; y: real);
+begin
+  fX:=x;
+  fY:=y;
+  fName:='Deposito';
+end;
+
+{ TClient }
+constructor TClient.Create(x, y, demand: real; type: integer);
+begin
+  fX:=x;
+  fY:=y;
+  fName:='';
+  fDemand:=demand;
+  fType:=type
+end;
+
+{ TRestriction }
+constructor TRestriction.Create(message: string);
+begin
+  fMessage:=message;
+end;
+
+{ TVehicle }
+constructor TVehicle.Create(capacity: real);
+begin
+  fCapacity:=capacity;
+  fCanLoad:=true;
+  fRestriction:=nil;
+end;
+
+procedure TVehicle.AlertRestriction(demand: real);
+var
+  criticalNumber: real;
+  restriction: TRestriction;
+begin
+  criticalNumber:=fCapacity * 0.9;
+
+  if demand >= fCapacity then
+  begin
+    fRestriction:=TRestriction.Create('Capacidade do veículo violada');
+    fCanLoad:=false;
+  end;
+  if demand >= criticalNumber then
+    fRestriction:=TRestriction.Create('Capacidade do veículo quase atingida');
+end;
+
+{ TRoute }
+constructor TRoute.Create;
+begin
+  fPoints:=TList.Create;
+  fVehicles:=TObjectList<TVehicle>.Create;
+end;
+
+destructor TRoute.Destroy;
+begin
+  fPoints.Free;
+  fVehicles.Free;
+  inherited;
+end;
+
+procedure TRoute.CalcEuclideanDistance(origin: TOrigin; client: TClient): real;
+var
+  diffX, diffY: real;
+begin
+  diffX:=Power(client.X - origin.X, 2);
+  diffX:=Power(client.X - origin.X, 2);
+  Result:=Sqrt(diffX + diffY, 2);
+end;
+
+procedure TRoute.FindMoreDistantClient;
+var
+  i, distantClientIndex: integer
+  dist, clientDistance: real;
+begin
+  dist:=-1;
+  clientDistance:=-1;
+  distantClientIndex:=-1;
+
+  for i:=0 to fPoints.Count - 2 do
+  begin
+    clientDistance:=CalcEuclideanDistance(fPoints[0], fPoints[i + 1]);
+    if clientDistance > dist then
+    begin
+      dist:=clientDistance;
+      distantClientIndex:=i;
+    end;
+  end;
+  Result:=fPoints[distantClientIndex]
+end;
+
+procedure TRoute.FindnearestClient;
+var
+  i, nearestClientIndex: integer
+  dist, clientDistance: real;
+begin
+  dist:=INFINITE;
+  clientDistance:=-1;
+  nearestClientIndex:=-1;
+
+  for i:=0 to fPoints.Count - 2 do
+  begin
+    clientDistance:=CalcEuclideanDistance(fPoints[0], fPoints[i + 1]);
+    if clientDistance < dist then
+    begin
+      dist:=clientDistance;
+      nearestClientIndex:=i;
+    end;
+  end;
+  Result:=fPoints[nearestClientIndex]
+end;
+
+{ THeuristic }
+constructor THeuristic.Create(route: TRoute);
+begin
+  fRoute:=route;
+  fBetterPath:=TList.Create;
+end;
+
+destructor THeuristic.Destroy;
+begin
+  fRoute.Free;
+  fBetterPath.Free;
+  inherited;
+end;
+
+procedure THeuristic.AddClient;
+var
+  i: integer;
+begin
+  for i:=0 to fRoute.fPoints.Count - 1 do
+  begin
+    fBetterPath.Add(fRoute.fPoints[i])
+  end;
+end;
+
+procedure THeuristic.InsertDemandIntoVehicle;
+begin
+
+end;
+
+procedure THeuristic.GenerateRoute;
+begin
+  
+end;
+
+end.

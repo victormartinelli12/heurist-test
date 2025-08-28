@@ -1,0 +1,307 @@
+﻿unit uHeuristicTest;
+
+interface
+
+uses
+  System.SysUtils,
+  System.Generics.Collections,
+  System.Classes,
+  Math;
+
+type
+  TPoint = class
+  protected
+    fX: real;
+    fY: real;
+  public
+    constructor Create(x, y: real);
+  end;
+
+  TOrigin = class(TPoint)
+  private
+    fName: string;    
+  public
+    property X    :    real   read fX;
+    property Y    :    real   read fY;
+    property Name :    string read fName;
+
+    constructor Create;
+
+  end;
+
+  TClient = class(TPoint)
+  private
+    fName: string;
+    fDemand: real;
+    fType: integer; // 0 = entrega - 1 = coleta - 2 = misto
+  public 
+    property X          : real    read fX;
+    property Y          : real    read fY;
+    property Name       : string  read fName;
+    property Demand     : real    read fDemand write fDemand;
+    property ClientType : integer read fType;
+
+    constructor Create(x, y, demand: real; clientType: integer);
+  
+  end;
+
+  TRestriction = class
+  private
+    fMessage: string;
+  public
+    property Message: string read fMessage;
+
+    constructor Create(message: string);
+  
+  end;
+
+  TVehicle = class
+  private
+    fCapacity: real;
+    fCanLoad: boolean;
+    fRestriction: TRestriction; 
+  public
+    property Capacity : real    read fCapacity write fCapacity;
+    property CanLoad  : boolean read fCanLoad;
+
+    constructor Create(capacity: real);
+
+    procedure AlertRestriction(demand: real);
+    procedure Load(client: TClient);
+    
+  end;
+
+  TRoute = class
+  private
+    fPoints: TList;
+    fVehicles: TObjectList<TVehicle>;
+    fCost: real;
+    fDistance: real;      
+  public
+    property Points    : TList  read fPoints;
+    property Vehicles  : TObjectList<TVehicle> read fVehicles;
+    property Cost      : real                  read fCost;
+    property Distance  : real                  read fDistance;
+
+    constructor Create;
+    destructor Destroy; override;
+
+    function CalcEuclideanDistance(origin: TOrigin; client: TClient): real;
+    function FindMoreDistantClient: TClient;
+    function FindnearestClient: TClient;
+    
+  end;
+
+  THeuristic = class
+  private
+    fRoute: TRoute;
+    fBetterPath: TList;
+  public
+    property Route      : TRoute read fRoute;
+    property BetterPath : TList  read fBetterPath;
+
+    constructor Create(route: TRoute);
+    destructor Destroy; override;
+
+    procedure AddClient;
+    procedure InsertDemandIntoVehicle;
+    procedure GenerateRoute;
+
+  end;
+
+implementation
+
+const
+  INFINITE=1.0E5;
+
+{ TPoint }
+constructor TPoint.Create(x: Real; y: Real);
+begin
+  fX:=x;
+  fY:=y;
+end;
+
+{ TOrigin }
+constructor TOrigin.Create;
+begin
+  fName:='Deposito';
+  inherited Create(0.0, 0.0);
+end;
+
+{ TClient }
+constructor TClient.Create(x, y, demand: real; clientType: integer);
+begin
+  fName:='';
+  fDemand:=demand;
+  fType:=clientType;
+  inherited Create(x, y);
+end;
+
+{ TRestriction }
+constructor TRestriction.Create(message: string);
+begin
+  fMessage:=message;
+end;
+
+{ TVehicle }
+constructor TVehicle.Create(capacity: real);
+begin
+  fCapacity:=capacity;
+  fCanLoad:=true;
+  fRestriction:=nil;
+end;
+
+procedure TVehicle.AlertRestriction(demand: real);
+var
+  restriction: TRestriction;
+begin
+  if demand >= fCapacity then
+  begin
+    fRestriction:=TRestriction.Create('Capacidade do veículo violada');
+    fCanLoad:=false;
+  end;
+end;
+
+procedure TVehicle.Load(client: TClient);
+begin
+  fCapacity:=fCapacity - client.fDemand;
+end;
+
+{ TRoute }
+constructor TRoute.Create;
+begin
+  fPoints:=TList.Create;
+  fVehicles:=TObjectList<TVehicle>.Create;
+end;
+
+destructor TRoute.Destroy;
+begin
+  fPoints.Free;
+  fVehicles.Free;
+  inherited;
+end;
+
+function TRoute.CalcEuclideanDistance(origin: TOrigin; client: TClient): real;
+var
+  diffX, diffY: real;
+begin
+  diffX:=Power(client.X - origin.X, 2);
+  diffY:=Power(client.X - origin.X, 2);
+  Result:=Sqrt(diffX + diffY);
+end;
+
+function TRoute.FindMoreDistantClient;
+var
+  i, distantClientIndex: integer;
+  dist, clientDistance: real;
+begin
+  dist:=-1.0;
+  clientDistance:=-1;
+  distantClientIndex:=-1;
+
+  for i:=0 to fPoints.Count - 2 do
+  begin
+    clientDistance:=CalcEuclideanDistance(fPoints[0], fPoints[i + 1]);
+    if clientDistance > dist then
+    begin
+      dist:=clientDistance;
+      distantClientIndex:=i;
+    end;
+  end;
+  Result:=fPoints[distantClientIndex]
+end;
+
+function TRoute.FindnearestClient: TClient;
+var
+  i, nearestClientIndex: integer;
+  dist, clientDistance: real;
+begin
+  dist:=INFINITE;
+  clientDistance:=-1;
+  nearestClientIndex:=-1;
+
+  for i:=0 to fPoints.Count - 2 do
+  begin
+    clientDistance:=CalcEuclideanDistance(fPoints[0], fPoints[i + 1]);
+    if clientDistance < dist then
+    begin
+      dist:=clientDistance;
+      nearestClientIndex:=i;
+    end;
+  end;
+  Result:=fPoints[nearestClientIndex]
+end;
+
+{ THeuristic }
+constructor THeuristic.Create(route: TRoute);
+begin
+  fRoute:=route;
+  fBetterPath:=TList.Create;
+end;
+
+destructor THeuristic.Destroy;
+begin
+  fRoute.Free;
+  fBetterPath.Free;
+  inherited;
+end;
+
+procedure THeuristic.AddClient;
+var
+  i: integer;
+begin
+  for i:=0 to fRoute.fPoints.Count - 1 do
+  begin
+    fBetterPath.Add(fRoute.fPoints[i])
+  end;
+end;
+
+procedure THeuristic.InsertDemandIntoVehicle;
+var
+  i, j: integer;
+  clients: TObjectList<TClient>;
+  vehicle: TVehicle;
+  remaining: real;
+begin
+  clients:=TObjectList<TClient>.Create(false);
+  try
+    for i:=1 to fRoute.Points.Count - 1 do
+      clients.Add(fRoute.Points[i]);
+    for i:=0 to fRoute.Vehicles.Count - 1 do
+    begin
+      vehicle:=fRoute.Vehicles[i];
+      remaining:=vehicle.Capacity;
+      for j:=0 to clients.Count do
+      begin
+        if clients[j].Demand > 0 then
+        begin
+          if remaining >= clients[j].Demand then
+          begin
+            remaining:=remaining - clients[j].Demand;
+            clients[j].Demand:=0;
+            vehicle.Load(clients[j])
+          end
+          else
+          begin
+            clients[j].Demand:=clients[j].Demand - remaining;
+            remaining:=0;
+            vehicle.AlertRestriction(clients[j].Demand);
+            Break;
+          end;
+        end;
+      end;
+
+      vehicle.Capacity:=remaining;
+    end;
+
+  finally
+    clients.Free;
+  end;
+end;
+
+procedure THeuristic.GenerateRoute;
+begin
+  
+end;
+
+end.

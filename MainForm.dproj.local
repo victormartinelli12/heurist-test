@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2025/08/22 19:15:33.000.813,=C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Unit1.pas</Transaction>
+    <Transaction>2025/08/22 19:15:45.000.843,=C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Unit2.pas</Transaction>
+    <Transaction>2025/08/22 19:16:56.000.077,C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Unit1.pas=C:\learn-pascal\grasp\uMainForm.pas</Transaction>
+    <Transaction>2025/08/22 19:16:56.000.077,C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Unit1.dfm=C:\learn-pascal\grasp\uMainForm.dfm</Transaction>
+    <Transaction>2025/08/22 19:17:32.000.000,C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Unit2.pas=C:\learn-pascal\grasp\uHeuristicTest.pas</Transaction>
+    <Transaction>2025/08/22 19:17:42.000.858,C:\Users\Edu\OneDrive\Documentos\Embarcadero\Studio\Projects\Project1.dproj=C:\learn-pascal\grasp\MainForm.dproj</Transaction>
+  </Transactions>
+</BorlandProject>
