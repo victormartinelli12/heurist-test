@@ -12,6 +12,7 @@ type
   TClients = class;
   TVehicles = class;
   TVehicle = class;
+  TRoutePath = class;
 
   TClient = class(TObject)
   protected
@@ -45,6 +46,7 @@ type
     function    FindMostDistantClient: TClient;
     function    FindNearestClient: TClient;
     function    GetClient(index: integer): TClient;
+    function    GetClientsLength: integer;
     function    GetVehicle(index: integer): TVehicle;
     procedure   SetDepositCapacity;
     procedure   SortClients;
@@ -96,6 +98,43 @@ type
   public
     function Add(aVehicle: TVehicle): integer;
     property Items[index: integer]: TVehicle read GetItem; default;
+  end;
+
+  TRoute = class(TObject)
+  private
+    fDeposit       : TDeposit;
+    fVehicles      : TVehicles;
+    fClients       : TClients;
+    fTotalCost     : real;
+    fTotalDistance : real;
+    fTotalVehicles : integer;
+    fTotalClients  : integer;
+    fInitialRoute  : TRoutePath;
+  public
+    constructor Create;
+    destructor  Destroy; override;
+    function    CalcTotalCost: real;
+    function    CalcTotalDistance: real;
+    function    GetTotalVehicles: integer;
+    function    GetTotalClients: integer;
+    function    GenInitialRoute: TList;
+  published
+    property Deposit       : TDeposit   read fDeposit;
+    property Vehicles      : TVehicles  read fVehicles;
+    property Clients       : TClients   read fClients;
+    property TotalCost     : real       read fTotalCost;
+    property TotalDistance : real       read fTotalDistance;
+    property TotalVehicles : integer    read fTotalVehicles;
+    property TotalClients  : integer    read fTotalClients;
+    property InitialRoute  : TRoutePath read InitialRoute;
+  end;
+
+  TRoutePath = class(TClients)
+  public
+    constructor Create; reintroduce;
+    function Add(client: TClient): integer; reintroduce;
+    procedure Swap(i, j: integer);
+    procedure Reverse(i, j: integer);
   end;
 
 function CompareClientsPointers(ptr1, ptr2: Pointer): longInt;
@@ -155,7 +194,7 @@ end;
 
 procedure TClients.InsertDeposit(deposit: TDeposit);
 begin
-  inherited Insert(0, deposit);
+  TClient(inherited Insert(0, deposit));
 end;
 
 { TVechile }
@@ -261,6 +300,11 @@ begin
   Result:=fVehicles.GetItem(index);
 end;
 
+function TDeposit.GetClientsLength: integer;
+begin
+  Result := fClients.Count;
+end;
+
 function TDeposit.GetClient(index: integer): TClient;
 begin
   Result:=fClients.GetItem(index);
@@ -286,6 +330,143 @@ procedure TDeposit.SortClients;
 begin
   GLOBAL_DEPOSIT:=Self;
   fClients.Sort(@CompareClientsPointers);
+end;
+
+{ TRoute }
+constructor TRoute.Create;
+begin
+  fClients:=TClients.Create(true);
+  fVehicles:=TVehicles.Create(true);
+  fInitialRoute:=TRoutePath.Create;
+end;
+
+destructor TRoute.Destroy;
+begin
+  fClients.Free;
+  fVehicles.Free;
+  fInitialRoute.Free;
+  inherited;
+end;
+
+function TRoute.CalcTotalCost: real;
+var
+  totalCost: real;
+  i: integer;
+begin
+  totalCost:=0.0;
+  for i:=0 to fVehicles.Count -1 do
+  begin
+    totalCost:=totalCost + fVehicles[i].CostPerKm;
+  end;
+  totalCost:=totalCost * fTotalDistance;
+  Result:=totalCost;
+end;
+
+function TRoute.CalcTotalDistance: real;
+var
+  totalDist: real;
+  i: integer;
+begin
+  totalDist:=0.0;
+  for i:=1 to fClients.Count - 1 do
+  begin
+    totalDist:=totalDist + CalcEuclideanDistance(fClients[0], fClients[i]);
+  end;
+  Result:=totalDist;
+end;
+
+function TRoute.GetTotalVehicles: integer;
+begin
+  Result:=fVehicles.Count;
+end;
+
+function TRoute.GetTotalClients: integer;
+begin
+  Result:=fClients.Count;
+end;
+
+function TRoute.GenInitialRoute: TRoutePath;
+var
+  i: integer;
+  deposit, current, nextClient, bestClient: TClient;
+  distance, bestDistance: real;
+  pool: TList;
+begin
+  fInitialRoute.Free;
+  deposit:=fDeposit;
+  fInitialRoute.InsertDeposit(deposit);
+  pool:= TList.Create;
+  try
+    for i:=0 to fClients.Count - 1 do
+      pool.Add(fClients[i]);
+    bestDistance:=-1;
+    bestClient:=-1;
+    for i:=0 to pool.Count - 1 do
+    begin
+      distance:=CalcEuclideanDistance(deposit, fClient(pool[i]));
+      if distance > bestDistance then
+      begin
+        bestDistance:=distance;
+        bestClient:=fClient(pool[i]);
+      end;
+    end;
+    if bestClient <> nil then
+    begin
+      fInitialRoute.Add(bestClient);
+      pool.Remove(bestClient);
+    end;
+    while pool.Count > 0 do
+    begin
+      current:=fInitialRoute[fInitialRoute.Count - 1];
+      bestDistance:=INFINITE;
+      bestClient:=nil;
+      for i := 0 to pool.Count - 1 do
+      begin
+        dist := CalcEuclideanDistance(current, TClient(pool[i]));
+        if dist < bestDist then
+        begin
+          bestDist := dist;
+          bestClient := TClient(pool[i]);
+        end;
+      end;
+      fInitialRoute.Add(bestClient);
+      pool.Remove(bestClient);
+    end;
+    fInitialRoute.Add(best);
+  finally
+    pool.Free;
+  end;
+  Result:=fInitialRoute;
+end;
+
+{ TRoutePath }
+
+constructor TRoutePath.Create;
+begin
+  inherited Create(false);
+end;
+
+function TRoutePath.Add(client: TClient): integer;
+begin
+  Result:= inherited Add(client);
+end;
+
+procedure TRoutePath.Swap(i, j: integer);
+var
+  tmp: TClient;
+begin
+  tmp:=Items[i];
+  Items[i]:=Items[j];
+  Items[j]:=tmp;
+end;
+
+procedure TRoutePath.Reverse(i, j: integer);
+begin
+  while i<j do
+  begin
+    Swap(i,j);
+    Inc(i); Dec(j);
+  end;
 end;
 
 // FUNÇÕES GLOBAIS -------
